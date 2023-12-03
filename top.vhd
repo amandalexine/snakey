@@ -8,7 +8,11 @@ entity top is
 		clk_in_12m : in std_logic; --12mHz clock pll
 		HSYNC : out std_logic;
 		VSYNC : out std_logic;
-		rgb : out std_logic_vector(5 downto 0)
+		rgb : out std_logic_vector(5 downto 0);
+		--NES
+		latch : out std_logic;
+		clock : out std_logic;
+		data : in std_logic
 	);
 end top;
 
@@ -22,6 +26,15 @@ component mypll is
         outglobal_o: out std_logic
     );
 end component;
+
+component NEScontroller is 
+  port(
+	latch : out std_logic;
+	clock : out std_logic;
+	data : in std_logic;
+	output : out std_logic_vector(7 downto 0)
+  );
+  end component;
 
 component vga is
 	port(
@@ -51,7 +64,9 @@ end component;
 	signal row : unsigned(9 downto 0);
 	signal column : unsigned(9 downto 0);
 	signal valid : std_logic;
-
+	
+	--NES
+	signal controllerOutput : std_logic_vector(7 downto 0);
 begin 
 	
 	pll : mypll port map(ref_clk_i => clk_in_12m,
@@ -60,6 +75,7 @@ begin
 	
 	myvga : vga port map (clk_in => clk_25m, row => row, column => column, valid => valid, HSYNC => HSYNC, VSYNC => VSYNC);
 	
-	print_pat : pattern_gen port map(clk => clk_25m, row => row, column => column, valid => valid, rgb => rgb);				  
+	print_pat : pattern_gen port map(clk => clk_25m, row => row, column => column, valid => valid, rgb => rgb);		
+	controller : NEScontroller port map(latch => latch, clock => clock, data => data, output => controllerOutput);
 			 
 end;
