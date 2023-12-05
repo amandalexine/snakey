@@ -18,26 +18,26 @@ signal s : State := START;
 begin
   process(clk) begin
         if rising_edge(clk) then
-			if s = START then
-                if output(7) = '1' then
+		if s = START then
+                    if output(7) = '1' then
                     s <= GAME;
                 else
                     s <= START;
                 end if;
-			elsif s = GAME then
-				if game_over = '1' then
-				   s <= FINAL;
-				else 
-				   s <= GAME;
-				end if;
-			elsif s = FINAL then 
-				if output(7) = '1' then
-					s <= START;
-				else
-				    s <= FINAL;
-				end if;
+	elsif s = GAME then
+		if game_over = '1' then
+		    s <= FINAL;
+		else 
+		    s <= GAME;
+		end if;
+	elsif s = FINAL then 
+		if output(7) = '1' then
+		    s <= START;
+		else
+		    s <= FINAL;
+		end if;
             end if;
-        end if;
+	end if;
   end process;
 end;
 
