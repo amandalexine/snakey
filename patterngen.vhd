@@ -14,24 +14,28 @@ entity pattern_gen is
 		column : in unsigned(9 downto 0);
 		valid : in std_logic;
 		
-		--where the snake should be within the game
-		snake_x : in unsigned(9 downto 0);
-		snake_y : in unsigned(9 downto 0);
-		
-		--where the apple should first be created within the game
-		apple_x : in unsigned(9 downto 0);
-		apple_y : in unsigned(9 downto 0);
-		
 		rgb : out std_logic_vector(5 downto 0);
 		
+		apple_x_addy : in unsigned(5 downto 0);
+		apple_y_addy : in unsigned(5 downto 0);
+		
 		-- Pass through for writing to RAM
-		w_enable : out std_logic;
-		w_addr : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-		w_data : out std_logic_vector(WORD_SIZE - 1 downto 0)
+		w_enable : in std_logic;
+		w_addr : in std_logic_vector(ADDR_WIDTH - 1 downto 0);
+		w_data : in std_logic_vector(WORD_SIZE - 1 downto 0)
 	);
 end pattern_gen;
 
 architecture synth of pattern_gen is
+
+	component start_screen_rom is
+		port(
+			clk : in std_logic;
+			xaddy : in unsigned(5 downto 0);
+			yaddy : in unsigned(4 downto 0);
+			rgb : out std_logic_vector(5 downto 0)
+		);
+	end component;
 
 	component snake_rom is
 		port(
@@ -45,8 +49,8 @@ architecture synth of pattern_gen is
 	component apple_rom is
 		port(
 			clk : in std_logic;
-			xaddy : in unsigned(4 downto 0);
-			yaddy : in unsigned(4 downto 0);
+			xaddy : in unsigned(3 downto 0);
+			yaddy : in unsigned(3 downto 0);
 			rgb : out std_logic_vector(5 downto 0)
 		);
 	end component;
@@ -72,6 +76,14 @@ architecture synth of pattern_gen is
 	signal patt : integer;
 	signal temp1 : integer;
 	
+	--start screen signals
+	signal start_screen_w : unsigned(9 downto 0);
+	signal start_screen_h : unsigned(9 downto 0);
+	
+	signal start_screen_x : unsigned(5 downto 0);
+	signal start_screen_y : unsigned(4 downto 0);
+	signal make_start_screen : std_logic_vector(5 downto 0);
+	
 	-- snake ROM signals
 	signal snake_size_w : unsigned(9 downto 0);
 	signal snake_size_h : unsigned(9 downto 0);
@@ -83,9 +95,10 @@ architecture synth of pattern_gen is
 	-- Apple ROM signals
 	signal apple_size_w : unsigned(9 downto 0);
 	signal apple_size_h : unsigned(9 downto 0);
+
 	
-	signal apple_rom_x : unsigned(4 downto 0);
-	signal apple_rom_y : unsigned(4 downto 0);
+	signal apple_rom_x : unsigned(3 downto 0);
+	signal apple_rom_y : unsigned(3 downto 0);
 	signal color_apple : std_logic_vector(5 downto 0);
 	
 	--RAM Signals
@@ -97,12 +110,22 @@ architecture synth of pattern_gen is
 	signal row_divide16 : std_logic_vector(5 downto 0);
 	signal col_divide16 : std_logic_vector(5 downto 0);
 	signal cur_tile : std_logic_vector(2 downto 0);
+	signal row_tile_bound : unsigned(9 downto 0);
+	signal col_tile_bound : unsigned(9 downto 0);
+	signal row_tile_subtracted : unsigned(9 downto 0);
+	signal col_tile_subtracted : unsigned(9 downto 0);
 	
 	--counter
 	signal counter : unsigned(25 downto 0) := 26d"0";
 	
 	
 begin
+
+	--start ROM
+	start_draw_screen : start_screen_rom port map(clk => clk,
+									xaddy => start_screen_x(5 downto 0),
+									yaddy => start_screen_y(4 downto 0),
+									rgb => make_start_screen);
 
 	--snake ROM
 	snake_draw_alive : snake_rom port map(clk => clk, 
@@ -111,8 +134,8 @@ begin
 									rgb => color_snake_alive);
 									
 	apple_draw : apple_rom port map (clk => clk,
-									xaddy => apple_rom_x(4 downto 0),
-									yaddy => apple_rom_y(4 downto 0),
+									xaddy => apple_rom_x,
+									yaddy => apple_rom_y,
 									rgb => color_apple);
 									
 	-- RAM portmap
@@ -128,58 +151,62 @@ begin
 	patt <= to_integer(temp0);
 	temp1 <= patt mod 9;
 	
+	--change screen dimensions
+	start_screen_w <= 10d"120";
+	start_screen_h <= 10d"90";
+	
+	--start_screen_x <= row(9 downto 0) - start_x(9 downto 0);
+	--start_screen_y <= column(9 downto 0) - start_y(9 downto 0);
 		
-	--drawing snake
-	snake_size_w <= 10d"64";
-	snake_size_h <= 10d"64";
+	-- tile calculations
+	col_tile_bound <= column(9 downto 4) & "0000";
+	row_tile_bound <= row(9 downto 4) & "0000";
 	
-	rom_x <= row(6 downto 2) - snake_x(6 downto 2);
-	rom_y <= column(6 downto 2) - snake_y(6 downto 2);
+	col_tile_subtracted <= column - col_tile_bound;
+	row_tile_subtracted <= row - row_tile_bound;
 	
-	--drawing apple
-	apple_size_w <= 10d"24";
-	apple_size_h <= 10d"24";
+	-- snake drawings calculations
+	rom_x <= "0" & col_tile_subtracted(3 downto 0);
+	rom_y <= "0" & row_tile_subtracted(3 downto 0);
+	-- apple drawing calculations
+	apple_rom_x <= col_tile_subtracted(3 downto 0);
+	apple_rom_y <= row_tile_subtracted(3 downto 0);
 	
-	
-	-- apple_rom_x <= row(6 downto 2) - apple_x(6 downto 2);
-	-- apple_rom_y <= row(6 downto 2) - apple_y(6 downto 2);
+	-- Calculates the current tile
+	row_logic_vector <= std_logic_vector(row);
+	col_logic_vector <= std_logic_vector(column);
+	row_divide16 <= row_logic_vector(9 downto 4);
+	col_divide16 <= col_logic_vector(9 downto 4);
+	r_addr <= row_divide16 & col_divide16;
+	cur_tile <= r_data;
 	
 	-- displaying background
-	process(valid, clk) begin -- TODO: add CLK to process
-		if valid = '0' then
-			rgb <= "000000";
-		elsif valid = '1' then
-			row_logic_vector <= std_logic_vector(row);
-			col_logic_vector <= std_logic_vector(column);
-			row_divide16 <= row_logic_vector(9 downto 4);
-			col_divide16 <= col_logic_vector(9 downto 4);
-			r_addr <= row_divide16 & col_divide16;
-			cur_tile <= r_data;
-			
-			
+	process(clk) begin -- TODO: add CLK to process
+		if (rising_edge(clk)) then
+			if valid = '0' then
+				rgb <= "000000";
+			elsif valid = '1' then
+				if (cur_tile = "000") then
+					rgb <= "001110";
+				elsif(cur_tile = "001") then
+					rgb <= color_apple;
+				elsif(cur_tile = "011") then
+					rgb <= color_snake_alive;
+				end if;
+				
+				if(row >= apple_y_addy and row <= (apple_y_addy + 16)) and (column >= apple_x_addy and column <= (apple_x_addy + 16)) then
+					rgb <= color_apple;
+				end if;
+				
+			end if;
+		end if;
+		
 			-- empty = 000
 			-- apple = 001
 			-- headdead = 010
 			-- headalive = 011
 			-- body = 100
 			-- tail = 101
-			-- surround with if(rising_edge(clk))
-			if rising_edge(clk) then
-				counter <= counter + 1;
-				if (cur_tile = "000") then
-					rgb <= "010101";
-				elsif(cur_tile = "001") then
-					-- Currently stuck at 0, doesn't advance through the ROM correctly
-					-- maybe rising edge?
-					--apple_rom_x <= column - (column(9 downto 4) * 16);
-					--apple_rom_y <= row - (row(9 downto 4) * 16);
-					apple_rom_x <= column(9 downto 4) - (apple_x(9 downto 4) * 16);
-					apple_rom_y <= row(9 downto 4) - (apple_y(9 downto 4) * 16);
-					rgb <= color_apple;
-				end if;
-			end if;
-			
-			-- cur_tile <= r_data();
 			
 			
 			-- PLACEHOLDER CODE
@@ -193,7 +220,12 @@ begin
 				--rgb <= "111111" when temp1 > 0 else "000000";
 				--rgb <= "111111";
 			--end if;
-		end if;
+			
+			--if(row >= start_screen_y and row <= (start_screen_y + start_screen_w)) and (column >= start_screen_x and column <= (start_screen_y + start_screen_h)) then
+				--rgb <= make_start_screen;
+			--end if;
+			
+		
 	end process;
 	
 	--controls what snake image is displayed based upon what happens, update as you insert more variations of snake
